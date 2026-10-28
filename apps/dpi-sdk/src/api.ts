@@ -56,6 +56,8 @@ export interface ModelInfo {
 }
 
 export interface DeviceInfo {
+  /** Session cap: max concurrent agent turns, running turns, and requests held for a slot. */
+  governor?: { cap: number; active: number; queued: number };
   uid: string;
   name: string;
   hostname: string;

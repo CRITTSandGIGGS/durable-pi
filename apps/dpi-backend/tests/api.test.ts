@@ -12,7 +12,7 @@ test("REST v1: auth, sessions, agents, messages, waits, idempotency, errors", as
   const server = await bootServer({ home: join(t.root, "home"), startDirs: t.work, token, name: "api-box" });
   try {
     // Auth: healthz is open, /v1 needs the token in Authorization or X-DPI-Token.
-    assert.deepEqual(await (await fetch(`${server.base}/healthz`)).json(), { ok: true });
+    assert.deepEqual(await (await fetch(`${server.base}/healthz`)).json(), { ok: true, cap: 5, active: 0, queued: 0 });
     const anon = await fetch(`${server.base}/v1/device`);
     assert.equal(anon.status, 401);
     assert.equal((await anon.json()).error.code, "unauthorized");

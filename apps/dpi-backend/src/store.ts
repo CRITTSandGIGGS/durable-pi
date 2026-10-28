@@ -60,6 +60,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { createPlayground, Workspace, type SpawnSession } from "./extensions.js";
 import { createJobs, JobRuns, JOB_DEFS, jobDef, resolveJobInput, type Jobs } from "./jobs.js";
 import { ADDON_INFO, createAddons, PROMPTS, PromptChecklist, type Addons } from "./addons.js";
+import { capReader, Gate } from "./governor.js";
 import { JOB_RUNS_DOC } from "../../dpi-sdk/src/jobs.js";
 
 export const DURABLE_VERSION = "1.0.3";
@@ -152,6 +153,7 @@ export class Store {
   private unlockCatalog: () => void;
   private unlockShared?: () => void;
   private listeners = new Set<() => void>();
+  readonly gate = new Gate(capReader());
   /** Saved thresholds per session; null when the session uses the defaults for its model. */
   private compactions = new Map<string, Partial<CompactionSettings> | null>();
   /** Task labels never change once known: tool names of pi.tool tasks, job titles of job runs. */
@@ -260,6 +262,7 @@ export class Store {
       codeDir: CODE_DIR,
       capabilities: ["events", "docs", "demo", "jobs"],
       jobs: JOB_DEFS,
+      governor: this.gate.stats(),
     };
   }
 
@@ -812,7 +815,12 @@ export class Store {
     if (!["steer", "followUp", "reject"].includes(whenBusy)) throw invalid("whenBusy must be followUp, steer or reject");
     if (typeof body.requestId !== "string" || !body.requestId || body.requestId.length > 128)
       throw invalid("requestId is required (≤128 chars) so retries never submit twice");
-    return c.submit({ type: "input", content: body.content, requestId: body.requestId, whenBusy }, ctx);
+    const draft = { type: "input" as const, content: body.content, requestId: body.requestId, whenBusy };
+    const admitted = await this.gate.admit(async () => {
+      const submission = await c.submit(draft, ctx);
+      return { id: submission.id, wait: () => submission.wait(ctx), submission };
+    });
+    return admitted.submission;
   }
 
   async settled(h: Harness, submissionId: number, waitMs = 0, signal?: AbortSignal): Promise<SendResult> {
