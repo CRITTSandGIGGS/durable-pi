@@ -33,6 +33,7 @@ With the repo's network config, `just net up local && just backend run` does the
 | `DPI_PROVIDER` | `openrouter` | `faux` gives a free deterministic model for tests |
 | `OPENROUTER_API_KEY` | | model access, required unless `DPI_PROVIDER=faux`. Without it the device lists no models. Never sent to clients |
 | `TYPESAFE_API_KEY` | | optional: `jev-damage-control` asks Jev with it, else through OpenRouter |
+| `DPI_JEV_FAIL_OPEN` | | `1` lets bash run when Jev errors or takes over 10 s; otherwise `jev-damage-control` blocks (fails closed) |
 
 Flags `--port`, `--host`, `--name`, `--start-dirs`, `--data-dir` and `--env-file` override the env.
 
@@ -77,7 +78,7 @@ Templates live in [`deploy/`](deploy/). The operator skill [`.claude/skills/agen
 - A token holder has the agent's shell and filesystem access on that device. Start dirs are where sessions begin, not a sandbox.
 - macOS `ssh` devices run as a LaunchAgent in the logged-in session, so enable auto-login for unattended reboots. Agents working under `~/Documents` need Full Disk Access for the node binary.
 - LAN `ssh` devices speak plain HTTP, so the token crosses the LAN in cleartext. exe.dev devices use HTTPS.
-- `jev-damage-control` is off by default. When on, it sends each bash command to the Jev API, and the command runs if Jev fails. It is a guardrail, not a sandbox.
+- `jev-damage-control` is off by default. When on, it sends each bash command to the Jev API, and blocks the command if Jev errors or takes over 10 s (a failure is not memoized, so a retry asks again; `DPI_JEV_FAIL_OPEN=1` lets it run instead). It is a guardrail, not a sandbox.
 
 ## Demo runbook: hop into an already running agent
 

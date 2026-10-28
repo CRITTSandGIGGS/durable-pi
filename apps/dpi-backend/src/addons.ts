@@ -91,11 +91,38 @@ export const ADDON_INFO: Omit<HarnessExtensionInfo, "enabled" | "prompts">[] = [
     name: "jev-damage-control",
     title: "Jev damage control",
     description:
-      "Before every bash call, Jev judges the command in about 300 ms and blocks irreversible or destructive ones. The decision is a durable memo, so a restart never re-asks. If Jev is down, commands run.",
+      "Before every bash call, Jev judges the command in about 300 ms and blocks irreversible or destructive ones. The decision is a durable memo, so a restart never re-asks. If Jev is down or slower than 10 s, commands are blocked (set DPI_JEV_FAIL_OPEN=1 to let them run).",
   },
 ];
 
-export function createAddons(opts: { offline: boolean }) {
+/** Total budget for one gate decision, retries included (askJev alone allows 15s x 3). */
+export const JEV_GATE_TIMEOUT_MS = 10_000;
+export const JEV_UNAVAILABLE = "jev-damage-control: Jev unavailable, failing closed. Retry later or ask Cody.";
+type MemoApi = { memo<T>(key: string, ctx: never): Promise<T | undefined>; memo<T>(key: string, value: T, ctx: never): Promise<T> };
+
+/**
+ * The bash gate. Verdicts are durable memos, so a restart never re-asks. A Jev error or timeout blocks and is not
+ * memoized, so the retry asks again. DPI_JEV_FAIL_OPEN=1 restores the old behavior: a Jev outage lets bash run.
+ */
+export function jevBeforeTool(judge: (command: string) => Promise<Verdict>) {
+  return async (call: { name: string; arguments: unknown }, api: MemoApi, ctx: never) => {
+    if (call.name !== "bash") return;
+    const command = String((call.arguments as { command?: unknown }).command ?? "");
+    let verdict = await api.memo<Verdict>("jev-damage-control", ctx);
+    if (!verdict) {
+      try {
+        verdict = await judge(command);
+      } catch {
+        if (process.env.DPI_JEV_FAIL_OPEN === "1") return;
+        return { block: JEV_UNAVAILABLE };
+      }
+      verdict = await api.memo<Verdict>("jev-damage-control", verdict, ctx);
+    }
+    if (verdict.block) return { block: `jev-damage-control blocked this command: ${verdict.reason}` };
+  };
+}
+
+export function createAddons(opts: { offline: boolean; ask?: typeof askJev }) {
   const prompts = defineExtension({
     name: "system-prompts",
     sections: [
@@ -111,26 +138,12 @@ export function createAddons(opts: { offline: boolean }) {
       ),
     ],
   });
-  const judge = opts.offline ? judgeOffline : async (command: string) => gate(await askJev({ command }, BASH_QUESTIONS));
+  const judge = opts.offline
+    ? judgeOffline
+    : async (command: string) => gate(await (opts.ask ?? askJev)({ command }, BASH_QUESTIONS, AbortSignal.timeout(JEV_GATE_TIMEOUT_MS)));
   const jev = defineExtension({
     name: "jev-damage-control",
-    hooks: [
-      hook(ToolTask, {
-        beforeTool: async (call, api, ctx) => {
-          if (call.name !== "bash") return;
-          const command = String((call.arguments as { command?: unknown }).command ?? "");
-          let verdict = await api.memo<Verdict>("jev-damage-control", ctx);
-          if (!verdict) {
-            try {
-              verdict = await api.memo<Verdict>("jev-damage-control", await judge(command), ctx);
-            } catch {
-              return; // Fails open: a Jev outage must not stop bash.
-            }
-          }
-          if (verdict.block) return { block: `jev-damage-control blocked this command: ${verdict.reason}` };
-        },
-      }),
-    ],
+    hooks: [hook(ToolTask, { beforeTool: jevBeforeTool(judge) })],
   });
   const all: Record<string, Extension> = { "system-prompts": prompts, "jev-damage-control": jev };
   return { all, list: [prompts, jev] };
