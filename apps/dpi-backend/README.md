@@ -57,6 +57,8 @@ just net probe <id>    # /healthz 200 and /v1/device 401 without a token
 
 Templates live in [`deploy/`](deploy/). The operator skill [`.claude/skills/agent-sandboxes-exe-dev/cookbook/dpi-network.md`](../../.claude/skills/agent-sandboxes-exe-dev/cookbook/dpi-network.md) covers debugging per kind.
 
+**Session cap.** At most `cap` agent turns run at once across all sessions; extra `POST …/messages` requests wait in an in-memory FIFO (held requests are lost on restart; clients retry with the same `requestId`). The cap is `DPI_MAX_WORKERS`, else `~/.dpi/governor.json` `{"max_workers": N}`, else 5. On macOS, [`deploy/factory-governor.sh`](deploy/factory-governor.sh) (launchd: [`deploy/dev.dpi.governor.plist`](deploy/dev.dpi.governor.plist), every 30s) sets 2 while OBS or DaVinci Resolve runs, else 5. `/healthz` and `GET /v1/device` (`governor`) report `{cap, active, queued}`.
+
 ## Layout on a device
 
 ```

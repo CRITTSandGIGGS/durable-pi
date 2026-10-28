@@ -18,7 +18,7 @@ const store = await Store.open({
 
 const app = express();
 app.disable("x-powered-by");
-app.get("/healthz", (_req, res) => res.json({ ok: true }));
+app.get("/healthz", (_req, res) => res.json({ ok: true, ...store.gate.stats() }));
 app.use("/v1", bearerAuth(config.token), express.json({ limit: "256kb" }), v1(store));
 app.use((_req, res) => res.status(404).json({ error: { code: "not_found", message: "Route not found" } }));
 app.use(errorMiddleware);

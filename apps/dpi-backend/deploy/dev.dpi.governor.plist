@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Runs factory-governor.sh every 30s. Replace /Users/luther/dev/durable-pi with the checkout path, then:
+     cp to ~/Library/LaunchAgents/ and `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.dpi.governor.plist`. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.dpi.governor</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/luther/dev/durable-pi/apps/dpi-backend/deploy/factory-governor.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key><string>/Users/luther</string>
+  </dict>
+  <key>StartInterval</key><integer>30</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/Users/luther/.dpi/governor.log</string>
+  <key>StandardErrorPath</key><string>/Users/luther/.dpi/governor.log</string>
+</dict>
+</plist>
